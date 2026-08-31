@@ -1,11 +1,11 @@
 # STDLIB — Standard Library Only Proof
 
-> **Dependency policy:** `microdb` uses **Go standard library only**. No third-party modules are fetched at build or test time. See `go.mod` and `deps` proof below.
+> **Dependency policy:** `picodb` uses **Go standard library only**. No third-party modules are fetched at build or test time. See `go.mod` and `deps` proof below.
 
 ## Module Declaration
 
 ```go
-module microdb
+module picodb
 
 go 1.22
 
@@ -16,7 +16,7 @@ Verification (offline, no network):
 
 ```bash
 cat go.mod
-GOPROXY=off GOTOOLCHAIN=local go list -m all   # → only microdb
+GOPROXY=off GOTOOLCHAIN=local go list -m all   # → only picodb
 GOPROXY=off GOTOOLCHAIN=local go mod verify    # → all modules verified
 GOPROXY=off GOTOOLCHAIN=local go build ./...   # → no download
 ```
@@ -24,7 +24,7 @@ GOPROXY=off GOTOOLCHAIN=local go build ./...   # → no download
 Expected invariant:
 
 ```
-only microdb
+only picodb
 no third-party modules
 no network download
 no automatic toolchain fetch (GOTOOLCHAIN=local)
@@ -36,7 +36,7 @@ Only packages listed below appear in `go list -f '{{join .Imports ","}}' ./...`.
 
 | Package | Purpose | Used In |
 |---|---|---|
-| `os` | files, stdout/stderr, process exit, env `MICRODB_CRASH_AFTER_PREFIX`, truncation | `wal/writer.go`, `wal/reader.go`, `wal/debug.go`, `store`, `cli`, `lock` |
+| `os` | files, stdout/stderr, process exit, env `PICODB_CRASH_AFTER_PREFIX`, truncation | `wal/writer.go`, `wal/reader.go`, `wal/debug.go`, `store`, `cli`, `lock` |
 | `io` | `io.EOF`, `io.SeekEnd`, `io.ReadFull`, exact reads | `wal/writer.go`, `wal/reader.go` |
 | `encoding/binary` | big-endian `PutUint32`/`Uint32` for `RecordLen`, `CRC`, `KeyLen`, `ValLen` | `wal/record.go`, `wal/reader.go` |
 | `hash/crc32` | `ChecksumIEEE` over `Type‖KeyLen‖ValLen‖Key‖Value` | `wal/record.go`, `wal/reader.go` |

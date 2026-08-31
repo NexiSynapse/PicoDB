@@ -1,6 +1,6 @@
 <div align="center">
 
-<svg width="860" height="220" viewBox="0 0 860 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MicroDB hero">
+<svg width="860" height="220" viewBox="0 0 860 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="PicoDB hero">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#0f172a"/>
@@ -24,7 +24,7 @@
   </g>
   <g font-family="Segoe UI, Inter, sans-serif">
     <text x="36" y="58" font-size="13" font-weight="600" letter-spacing="3" fill="#7dd3fc">TRACK D — DATA &amp; STORAGE</text>
-    <text x="36" y="108" font-size="54" font-weight="800" fill="#fff" letter-spacing="-1">MicroDB</text>
+    <text x="36" y="108" font-size="54" font-weight="800" fill="#fff" letter-spacing="-1">PicoDB</text>
     <text x="36" y="138" font-size="16" fill="#cbd5e1" letter-spacing="0.3">Embedded crash-safe key-value store — Go stdlib only</text>
     <g transform="translate(36,158)">
       <rect width="118" height="28" rx="14" fill="#0ea5e9"/>
@@ -61,7 +61,7 @@
   </g>
 </svg>
 
-**Deterministic crash → truncated tail → previous data recovered. No dependencies. No goroutines. Just the log.**
+**Kill it mid-write. Reopen it. Your data is still there. Zero dependencies. Zero goroutines. Just the write-ahead log.**
 
 [![Go](https://img.shields.io/badge/Go-1.22-00ADD8?style=flat&logo=go&logoColor=white)](#dependency-proof)
 [![stdlib only](https://img.shields.io/badge/stdlib-only-0ea5e9?style=flat)](#stdlibmd)
@@ -97,18 +97,21 @@
 
 ## 1. Pitch
 
-**MicroDB** is a tiny embedded key-value store that proves you understand storage engines. Not a web stack. Not a framework. Just:
+**PicoDB** is a crash-safe embedded key-value store built entirely on the Go standard library. No external packages, no background threads, no hidden complexity.
 
-* an **append-only WAL**,
-* a **hash-map key directory** (Bitcask-style),
-* **CRC32 per record**, bounded lengths, **replay on startup**, **truncated tail repair**, and **kernel `flock` on the DB file itself**.
+What you get:
 
-> If the process dies mid-append, the next open detects the torn tail, discards it, and the previous data is intact — then you can append again immediately.
+* an **append-only WAL** with per-record CRC32 integrity,
+* an **in-memory key directory** (Bitcask-style hash map),
+* **replay-on-open** with automatic truncated-tail repair,
+* and **kernel `flock`** on the database file itself — no stale lockfiles.
+
+> Process dies mid-append? The next `Open()` detects the torn record, truncates back to the last clean offset, and the store is immediately writable again. No manual intervention. No data loss for committed records.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#e0f2fe','primaryTextColor':'#0c4a6e','lineColor':'#0ea5e9','tertiaryColor':'#f0f9ff'}}}%%
 flowchart LR
-  A["🌱 Seed<br/>put alpha/beta<br/><i>durable</i>"] --> B["⚡ Crash<br/>MICRODB_CRASH_AFTER_PREFIX=1<br/><i>prefix only</i>"]
+  A["🌱 Seed<br/>put alpha/beta<br/><i>durable</i>"] --> B["⚡ Crash<br/>PICODB_CRASH_AFTER_PREFIX=1<br/><i>prefix only</i>"]
   B --> C["🔍 Reopen<br/>Reader detects<br/><i>ErrCorruptTail</i>"]
   C --> D["✂️ Truncate<br/>to last good offset"]
   D --> E["✅ Recovered<br/>alpha + beta survive<br/>gamma gone"]
@@ -126,14 +129,16 @@ flowchart LR
 
 ## 2. Architecture
 
-Single writer, single lock authority, no background goroutines.
+One writer. One lock holder. No goroutines, no timers, no channels.
+
+The store owns the lock. The WAL owns the disk. The CLI owns nothing — it just calls `Store` methods and prints results.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#fff','lineColor':'#64748b'}}}%%
 flowchart TB
-  subgraph CLI["<b>CLI</b> — cmd/microdb • internal/cli"]
+  subgraph CLI["<b>CLI</b> — cmd/picodb • internal/cli"]
     direction TB
-    C1["microdb put / get / del"]
+    C1["picodb put / get / del"]
     C2["Exit codes: 0 OK • 1 I/O • 2 usage • 3 not found"]
   end
 
@@ -177,13 +182,13 @@ flowchart TB
   class Disk disk
 ```
 
-**Composition root** `cmd/microdb/main.go:1`:
+**Composition root** `cmd/picodb/main.go:1` — the only place that wires things together:
 
 ```go
 func main() { os.Exit(cli.Run(os.Args[1:], os.Stdout, os.Stderr)) }
 ```
 
-**Ownership:**
+**Who owns what:**
 
 | Worker | Owns | File |
 |---|---|---|
@@ -197,7 +202,7 @@ func main() { os.Exit(cli.Run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 ## 3. WAL Format
 
-Every record is length-prefixed, CRC-protected, and bounded.
+Every record is length-prefixed, CRC-protected, and bounded. Corrupting a single byte anywhere in the body is caught; so is a record that claims to be larger than ~16 MB.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#fff','lineColor':'#0ea5e9'}}}%%
@@ -268,7 +273,7 @@ flowchart LR
 
 ## 4. Recovery Algorithm
 
-**Policy:** *Stop at the first corrupt or truncated record and discard everything after it.* For an append-only single-writer log, everything before the first bad byte remains trustworthy.
+**Policy:** stop at the first corrupt or truncated record and throw away everything after it. For an append-only, single-writer log, everything that precedes the first bad byte is trustworthy — so the engine trusts it and forgets the rest.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'lineColor':'#64748b'}}}%%
@@ -295,7 +300,7 @@ flowchart TD
   style FAIL fill:#fef2f2,stroke:#ef4444,color:#7f1d1d
 ```
 
-**Self-healing proof** (required sequence `Plan §21`):
+**The one-line proof of self-healing:**
 
 ```
 open damaged DB → recover → truncate → put new key → close → reopen → new key exists
@@ -337,7 +342,7 @@ sequenceDiagram
 
 ## 5. Locking Model
 
-*The* correctness fix from v1: **never create `demo.wal.lock`**. A sidecar file survives `kill -9`. Instead lock the **DB file descriptor itself**.
+The single most important fix in this design: **we never create `demo.wal.lock`.** A sidecar lockfile is a lying artifact — it survives `kill -9` and blocks restarts forever. Instead, we lock the database file descriptor *itself*, so the kernel releases the lock the moment the process dies.
 
 ```mermaid
 %%{init: {'theme':'base'}}%%
@@ -375,13 +380,13 @@ flowchart TB
   style I fill:#f1f5f9,stroke:#94a3b8
 ```
 
-***Platform:*** `lock_unix.go` (`!windows`) uses `syscall.Flock`; `lock_windows.go` is a build-safe no-op. Strongest guarantee on the Unix demo host; Windows still compiles.
+***Platform:*** `lock_unix.go` (`!windows`) uses `syscall.Flock` for a hard guarantee; `lock_windows.go` is a build-safe no-op so the project still compiles there. The demo host is Unix, so the invariant is real.
 
 ---
 
 ## 6. Durability Policy
 
-No timer. No goroutine. Deterministic inline batching.
+No background flusher, no timer ticks. Just a deterministic batch: fsync every 100 appends, and always on `Close()`.
 
 ```mermaid
 %%{init: {'theme':'base'}}%%
@@ -413,20 +418,20 @@ flowchart LR
   style I fill:#ecfdf5,stroke:#10b981,stroke-width:2px
 ```
 
-**Buffer ordering rule** `Plan §13` — never `Sync` before `Flush`:
+**The ordering rule that matters** — a `Sync` is pointless if the write hasn't reached the OS buffer first:
 
 ```
 write → Flush → Sync    ✅
 write → Sync → Flush    ❌  (data never reaches disk)
 ```
 
-Base WAL path avoids `bufio.Writer` entirely; direct `os.File.Write` so ordering is trivial.
+The base WAL path skips `bufio.Writer` entirely and writes straight to the `os.File`, so this ordering falls out for free.
 
 ---
 
 ## 7. CLI
 
-Consumer-owned types, explicit exit codes, no `interface{}` leak.
+Small surface, explicit exit codes, and no `interface{}` leaking out of the public API. Tooling that scripts PicoDB never has to guess whether a command worked.
 
 ```go
 // internal/cli/cli.go
@@ -437,25 +442,25 @@ func Run(args []string, stdout, stderr io.Writer) int
 
 | Command | Example | Exit |
 |---|---|---:|
-| `put` | `microdb put demo.wal name keshav` | `0` |
-| `get` | `microdb get demo.wal name` → `keshav` on stdout | `0` / `3` if missing |
-| `del` | `microdb del demo.wal name` | `0` / `3` if missing |
-| `dump` | `microdb dump demo.wal` | optional — cut first |
+| `put` | `picodb put demo.wal name keshav` | `0` |
+| `get` | `picodb get demo.wal name` → `keshav` on stdout | `0` / `3` if missing |
+| `del` | `picodb del demo.wal name` | `0` / `3` if missing |
+| `dump` | `picodb dump demo.wal` | optional — cut first |
 
 ```bash
-./microdb put demo.wal alpha one
-./microdb get demo.wal alpha      # → one
-./microdb del demo.wal alpha
-./microdb get demo.wal alpha; echo $?  # → 3
+./picodb put demo.wal alpha one
+./picodb get demo.wal alpha      # → one
+./picodb del demo.wal alpha
+./picodb get demo.wal alpha; echo $?  # → 3
 ```
 
-`get` prints **only the value** to stdout; diagnostics go to stderr.
+`get` prints **only the value** to stdout; everything else is diagnostic and goes to stderr.
 
 ---
 
 ## 8. Crash Demo
 
-The centerpiece — deterministic, timing-independent.
+The centerpiece — and it's deterministic. No sleeps, no timing luck, no flaky tests. A fault-injection hook forces the process to exit mid-append, then we prove everything still works on the next open.
 
 ```mermaid
 sequenceDiagram
@@ -467,14 +472,14 @@ sequenceDiagram
 
   SH->>DB: put alpha one — fsync (durable)
   SH->>DB: put beta two — fsync (durable)
-  Note over SH,W: MICRODB_CRASH_AFTER_PREFIX=1
+  Note over SH,W: PICODB_CRASH_AFTER_PREFIX=1
   SH->>W: put gamma THREE
   W->>K: Sync() — flush alpha/beta
   W->>DB: write 8B prefix only (RecordLen|CRC)
   W->>K: Sync() prefix
   W->>W: os.Exit(137) — torn tail created
   Note over DB: alpha ✅ beta ✅ gamma = 8B prefix only ❌
-  SH->>W: unset MICRODB_CRASH_AFTER_PREFIX
+  SH->>W: unset PICODB_CRASH_AFTER_PREFIX
   SH->>DB: get alpha → one
   SH->>DB: get beta → two
   SH->>DB: get gamma → exit 3 (not found, truncated)
@@ -485,13 +490,13 @@ sequenceDiagram
 **Run it:**
 
 ```bash
-go build -o microdb ./cmd/microdb
+go build -o picodb ./cmd/picodb
 ./scripts/crash_demo.sh
 # or
 make demo-crash
 ```
 
-**What the judge sees:**
+**What a reviewer sees when they run it:**
 
 ```
 == Seed durable data ==
@@ -508,13 +513,13 @@ delta: four
 == Crash recovery demo passed ==
 ```
 
-> Fault injection exists only for demo/QA reproducibility and is not required for ordinary operation (`internal/wal/debug.go`).
+> The fault-injection hook exists purely so the demo and tests are reproducible. Normal operation never touches it (`internal/wal/debug.go`).
 
 ---
 
 ## 9. Complexity
 
-No fake sophistication — just honest bounds.
+No invented sophistication — just honest, stated bounds.
 
 | Operation | Design | Complexity |
 |---|---:|---|
@@ -524,7 +529,7 @@ No fake sophistication — just honest bounds.
 | `Replay` | sequential log scan | **O(file size)** |
 | `CRC` | `crc32.ChecksumIEEE` over body | **O(record size)** |
 
-Do not publish fake benchmark numbers. If a benchmark exists, publish measured results only.
+> We publish complexity bounds, not fake benchmark numbers. If a benchmark ever lands in this repo, it will carry real, measured output.
 
 ---
 
@@ -554,11 +559,11 @@ React, REST, ML, Docker, K8s, JWT, cloud deploy — the research mentions them, 
 
 ## 11. Prior Art
 
-We claim no invention — only a minimal, stdlib-only synthesis:
+We're not claiming an invention — PicoDB is a deliberately lean synthesis of ideas that serious storage engines have used for decades.
 
 ```mermaid
 mindmap
-  root((MicroDB<br/>stdlib synthesis))
+  root((PicoDB<br/>stdlib synthesis))
     Bitcask
       append-only log
       in-memory keydir
@@ -576,13 +581,13 @@ mindmap
       durability semantics
 ```
 
-> "We took established storage-engine ideas and implemented a deliberately minimal version using only the Go standard library." — `Plan §43`
+> "We took established storage-engine ideas and built the smallest reasonable version of them using nothing but the Go standard library." — `Plan §43`
 
 ---
 
 ## 12. Tests
 
-Pyramid adapted to a 3-hour project:
+A testing pyramid scaled to a three-hour project: one crash-demo up top, integration in the middle, and a foundation of fast unit tests.
 
 ```mermaid
 %%{init: {'theme':'base'}}%%
@@ -636,36 +641,36 @@ make check   # fmt-check + vet + test + integration
 
 ## 13. Dependency Proof
 
-**Judge-facing invariant:** `GOPROXY=off` build with empty `require ()`.
+**The invariant a reviewer can verify in seconds:** a `GOPROXY=off` build with an empty `require ()` block.
 
 ```bash
 cat go.mod
-# module microdb
+# module picodb
 # go 1.22
 # require ()
 
 GOPROXY=off GOTOOLCHAIN=local go list -m all
-# → microdb only
+# → picodb only
 
 GOPROXY=off GOTOOLCHAIN=local go mod verify
 # → all modules verified
 
-GOPROXY=off GOTOOLCHAIN=local go build -o microdb ./cmd/microdb
+GOPROXY=off GOTOOLCHAIN=local go build -o picodb ./cmd/picodb
 # → no download, no toolchain fetch
 
 # Clean-clone proof
-git clone <public-repo> /tmp/microdb-clean
-cd /tmp/microdb-clean
-GOPROXY=off GOTOOLCHAIN=local go build -o microdb ./cmd/microdb
+git clone <public-repo> /tmp/picodb-clean
+cd /tmp/picodb-clean
+GOPROXY=off GOTOOLCHAIN=local go build -o picodb ./cmd/picodb
 ```
 
-Also: `make deps` runs all four checks; `STDLIB.md` enumerates every imported package.
+`make deps` runs all four checks in one shot, and `STDLIB.md` lists every single package the project imports.
 
 ---
 
 ## 14. Future Work
 
-Explicitly out of sprint scope — listed so the rubric sees awareness:
+These are the directions we'd take PicoDB next — listed here explicitly so the scope is unambiguous and nothing shown was silently skipped:
 
 ```mermaid
 flowchart LR
@@ -697,21 +702,21 @@ Forbidden during sprint: compaction, snapshots, segment rotation, replication, n
 | **Functionality & Usefulness** | 35% | `put/get/del`, persistence, replay, `scripts/crash_demo.sh` |
 | **Zero-Dependency Craft** | 30% | `require ()`, `GOPROXY=off` proof, `STDLIB.md` |
 | **Code Quality & Idiom** | 25% | `gofmt`, `go vet`, `errors.Is`, `Store`-only lock, `SyncBatch`, tests |
-| **Innovation** | 10% | deterministic `MICRODB_CRASH_AFTER_PREFIX` injection, self-healing truncate, prior-art synthesis |
+| **Innovation** | 10% | deterministic `PICODB_CRASH_AFTER_PREFIX` injection, self-healing truncate, prior-art synthesis |
 
-**Priority rule:** crash safety beats optional features. `dump` is cut first (`Plan §5`).
+**Priority rule:** crash safety beats optional features. If something has to go, it's `dump` — never the crash recovery (`Plan §5`).
 
 ---
 
 ## Repository Layout
 
 ```
-microdb/
+picodb/
 ├── go.mod
 ├── Makefile
 ├── README.md
 ├── STDLIB.md
-├── cmd/microdb/main.go
+├── cmd/picodb/main.go
 ├── internal/
 │   ├── wal/
 │   │   ├── record.go     # Encode/DecodePrefix/Checksum — Worker A
@@ -736,13 +741,13 @@ microdb/
 
 ```bash
 # 1. Build (no network)
-GOPROXY=off GOTOOLCHAIN=local go build -o microdb ./cmd/microdb
+GOPROXY=off GOTOOLCHAIN=local go build -o picodb ./cmd/picodb
 
 # 2. Basic CLI
-./microdb put demo.wal name keshav
-./microdb get demo.wal name        # → keshav
-./microdb del demo.wal name
-./microdb get demo.wal name; echo $?  # → 3
+./picodb put demo.wal name keshav
+./picodb get demo.wal name        # → keshav
+./picodb del demo.wal name
+./picodb get demo.wal name; echo $?  # → 3
 
 # 3. Crash recovery (centerpiece)
 ./scripts/crash_demo.sh
@@ -759,7 +764,7 @@ make check
 
 <div align="center">
 
-*Built for the 180-minute hackathon — maximize rubric points per minute, and never cut the crash demo.*
+*Built in a 180-minute hackathon — every minute spent on reliability, not ceremony.*
 
 `WAL` • `CRC32` • `MaxRecordSize` • `Replay` • `Truncate` • `flock` • `SyncBatch` • `Self-healing`
 
