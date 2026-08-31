@@ -8,29 +8,85 @@
 [![CRC32](https://img.shields.io/badge/CRC32-per--record-10b981?style=flat)](#4-recovery-algorithm)
 [![flock](https://img.shields.io/badge/lock-flock%20on%20DB%20fd-f59e0b?style=flat)](#5-locking-model)
 
-[Architecture](#2-architecture) • [WAL Format](#3-wal-format) • [Recovery](#4-recovery-algorithm) • [Crash Demo](#8-crash-demo) • [CLI](#7-cli) • [Tests](#12-tests)
+[Quick Start](#quick-start) • [Architecture](#2-architecture) • [WAL Format](#3-wal-format) • [Recovery](#4-recovery-algorithm) • [Interactive Shell](#interactive-shell) • [Crash Demo](#8-crash-demo) • [CLI](#7-cli) • [Tests](#12-tests)
 
 </div>
 
 ---
 
+## Quick Start
+
+Build and start using PicoDB in about a minute. No network, no extra tools — just the Go toolchain and this repo.
+
+```bash
+# 1. Build the binary (no network — stdlib only)
+GOPROXY=off GOTOOLCHAIN=local go build -o picodb ./cmd/picodb
+
+# 2. Use it from the command line
+./picodb put demo.wal name keshav   # write a key
+./picodb get demo.wal name          # → keshav
+./picodb del demo.wal name          # remove it
+./picodb get demo.wal name; echo $? # → 3 (not found)
+
+# 3. Or open the interactive shell (menu-driven)
+./scripts/interactive.ps1
+
+# 4. See the crash-recovery demo (the centerpiece)
+./scripts/crash_demo.sh
+
+# 5. Run the quality gates
+go vet ./...
+go test ./...
+go test -tags=integration ./...
+make check
+```
+
+## Interactive Shell
+
+For a friendlier way to work with data, PicoDB ships a menu-driven interactive shell: `scripts/interactive.ps1`.
+
+```bash
+./scripts/interactive.ps1
+```
+
+It opens a REPL-style menu that wraps the underlying `picodb` CLI:
+
+| Option | Action |
+|---|---|
+| **1 — Put / create a key** | Write a key-value pair to the store |
+| **2 — Get / read a key** | Look up a value by key |
+| **3 — Delete a key** | Remove a key (appends a tombstone) |
+| **4 — List all keys** | Show the keys created this session |
+| **5 — Clear all data** | Wipe the database file |
+| **0 — Exit** | Close the shell (data stays saved) |
+
+Every create/read/delete goes straight through the real `picodb` store, so it's genuinely persistent and crash-safe — the same WAL, CRC protection, and recovery as the CLI. On Windows you can launch it with:
+
+```powershell
+powershell -NoExit -File .\scripts\interactive.ps1
+```
+
+---
+
 ## Table of Contents
 
-1. [Description](#1-Description)
-2. [Architecture](#2-architecture)
-3. [WAL Format](#3-wal-format)
-4. [Recovery Algorithm](#4-recovery-algorithm)
-5. [Locking Model](#5-locking-model)
-6. [Durability Policy](#6-durability-policy)
-7. [CLI](#7-cli)
-8. [Crash Demo](#8-crash-demo)
-9. [Complexity](#9-complexity)
-10. [Design Decisions & Trade-offs](#10-design-decisions--trade-offs)
-11. [Prior Art](#11-prior-art)
-12. [Tests](#12-tests)
-13. [Dependency Proof](#13-dependency-proof)
-14. [Future Work](#14-future-work)
-15. [Rubric Mapping](#15-rubric-mapping)
+1. [Quick Start](#quick-start)
+2. [Interactive Shell](#interactive-shell)
+3. [Description](#1-Description)
+4. [Architecture](#2-architecture)
+5. [WAL Format](#3-wal-format)
+6. [Recovery Algorithm](#4-recovery-algorithm)
+7. [Locking Model](#5-locking-model)
+8. [Durability Policy](#6-durability-policy)
+9. [CLI](#7-cli)
+10. [Crash Demo](#8-crash-demo)
+11. [Complexity](#9-complexity)
+12. [Design Decisions & Trade-offs](#10-design-decisions--trade-offs)
+13. [Prior Art](#11-prior-art)
+14. [Tests](#12-tests)
+15. [Dependency Proof](#13-dependency-proof)
+16. [Future Work](#14-future-work)
+17. [Rubric Mapping](#15-rubric-mapping)
 
 ---
 
@@ -680,32 +736,8 @@ picodb/
 │       ├── lock_unix.go     # flock on DB fd — Worker E
 │       └── lock_windows.go  # compile-safe fallback
 └── scripts/
-    └── crash_demo.sh     # deterministic demo — Worker E
-```
-
----
-
-## Quick Start
-
-```bash
-# 1. Build (no network)
-GOPROXY=off GOTOOLCHAIN=local go build -o picodb ./cmd/picodb
-
-# 2. Basic CLI
-./picodb put demo.wal name keshav
-./picodb get demo.wal name        # → keshav
-./picodb del demo.wal name
-./picodb get demo.wal name; echo $?  # → 3
-
-# 3. Crash recovery (centerpiece)
-./scripts/crash_demo.sh
-
-# 4. Quality gates
-gofmt -l .                          # must be empty
-go vet ./...
-go test ./...
-go test -tags=integration ./...
-make check
+    ├── crash_demo.sh     # deterministic crash demo — Worker E
+    └── interactive.ps1   # menu-driven interactive shell
 ```
 
 ---
