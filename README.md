@@ -1,8 +1,8 @@
-# MicroDB
+# PicoDB
 
-**MicroDB combines a Bitcask-style in-memory keydir with CRC-protected length-prefixed WAL records, deterministic batched syncing, OS-managed process locking, and self-healing tail truncation during recovery.**
+**PicoDB combines a Bitcask-style in-memory keydir with CRC-protected length-prefixed WAL records, deterministic batched syncing, OS-managed process locking, and self-healing tail truncation during recovery.**
 
-MicroDB is an embedded crash-safe key-value store written in Go using only the standard library. Its core is an append-only write-ahead log combined with an in-memory hash index.
+PicoDB is an embedded crash-safe key-value store written in Go using only the standard library. Its core is an append-only write-ahead log combined with an in-memory hash index.
 
 ## Architecture
 
@@ -62,9 +62,9 @@ Writes are batched automatically via a `SyncBatch` parameter (currently 100). Th
 ## CLI Examples
 
 ```bash
-microdb put demo.wal name keshav
-microdb get demo.wal name
-microdb del demo.wal name
+picodb put demo.wal name keshav
+picodb get demo.wal name
+picodb del demo.wal name
 ```
 
 ## Crash Demo

@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"microdb/internal/cli"
+	"picodb/internal/cli"
 )
 
 func main() {

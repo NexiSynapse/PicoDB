@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"microdb/internal/wal"
+	"picodb/internal/wal"
 )
 
 func TestReplayAfterSimulatedCrash_TornTail(t *testing.T) {

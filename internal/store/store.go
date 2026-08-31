@@ -7,8 +7,8 @@ import (
 	"os"
 	"sync"
 
-	"microdb/internal/lock"
-	"microdb/internal/wal"
+	"picodb/internal/lock"
+	"picodb/internal/wal"
 )
 
 var ErrKeyNotFound = errors.New("store: key not found")
@@ -48,7 +48,7 @@ func Open(path string) (*Store, error) {
 			break
 		}
 		if errors.Is(err, wal.ErrCorruptTail) {
-			fmt.Fprintf(os.Stderr, "microdb: wal recovery: corrupt tail detected at offset %d, truncating\n", reader.Offset())
+			fmt.Fprintf(os.Stderr, "picodb: wal recovery: corrupt tail detected at offset %d, truncating\n", reader.Offset())
 			break
 		}
 		if err != nil {

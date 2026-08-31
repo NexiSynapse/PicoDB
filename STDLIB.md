@@ -1,6 +1,6 @@
 # Standard Library Packages
 
-MicroDB is built entirely using the Go standard library, with absolutely zero external third-party dependencies.
+PicoDB is built entirely using the Go standard library, with absolutely zero external third-party dependencies.
 
 | Package | Purpose |
 |---|---|
