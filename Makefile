@@ -1,10 +1,10 @@
-.PHONY: build test integration vet fmt-check fmt deps demo-crash check clean
+﻿.PHONY: build test integration vet fmt-check fmt deps demo-crash check clean
 
-BINARY := microdb
+BINARY := picodb
 PKG    := ./...
 
 build:
-	go build -o $(BINARY) ./cmd/microdb
+	go build -o $(BINARY) ./cmd/picodb
 
 test:
 	go test ./...
@@ -28,7 +28,7 @@ deps:
 	@echo ""
 	@echo "== go mod verify (offline) ==" && GOPROXY=off GOTOOLCHAIN=local go mod verify
 	@echo ""
-	@echo "== build (offline) ==" && GOPROXY=off GOTOOLCHAIN=local go build -o $(BINARY) ./cmd/microdb && echo "offline build OK" && rm -f $(BINARY)
+	@echo "== build (offline) ==" && GOPROXY=off GOTOOLCHAIN=local go build -o $(BINARY) ./cmd/picodb && echo "offline build OK" && rm -f $(BINARY)
 
 demo-crash:
 	./scripts/crash_demo.sh
@@ -39,3 +39,4 @@ check: fmt-check vet test integration
 clean:
 	rm -f $(BINARY) demo.wal *.wal
 	go clean ./...
+

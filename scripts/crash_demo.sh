@@ -1,12 +1,12 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 set -euo pipefail
 
 DB=demo.wal
-BIN=./microdb
+BIN=./picodb
 
 if [ ! -f "$BIN" ]; then
-  echo "building microdb..."
-  go build -o "$BIN" ./cmd/microdb
+  echo "building picodb..."
+  go build -o "$BIN" ./cmd/picodb
 fi
 
 rm -f "$DB"
@@ -17,15 +17,15 @@ echo "== Seed durable data =="
 echo "alpha/beta durable"
 
 echo ""
-echo "== Trigger deterministic crash (MICRODB_CRASH_AFTER_PREFIX=1) =="
-export MICRODB_CRASH_AFTER_PREFIX=1
+echo "== Trigger deterministic crash (PICODB_CRASH_AFTER_PREFIX=1) =="
+export PICODB_CRASH_AFTER_PREFIX=1
 set +e
 "$BIN" put "$DB" gamma THREE
 STATUS=$?
 set -e
 echo "crashed process status: $STATUS (expected 137 or non-zero)"
 
-unset MICRODB_CRASH_AFTER_PREFIX
+unset PICODB_CRASH_AFTER_PREFIX
 
 echo ""
 echo "== WAL tail after crash (hexdump) =="
@@ -71,3 +71,4 @@ echo "== Reopen proof: A,B,D survive =="
 
 echo ""
 echo "== Crash recovery demo PASSED =="
+

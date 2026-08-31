@@ -1,4 +1,4 @@
-module microdb
+﻿module picodb
 
 go 1.22
 

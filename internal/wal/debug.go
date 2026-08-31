@@ -1,4 +1,4 @@
-package wal
+﻿package wal
 
 import (
 	"os"
@@ -10,7 +10,7 @@ import (
 //
 //	README wording: "Fault injection exists only for demo/QA reproducibility
 //	and is not required for ordinary database operation."
-const crashEnv = "MICRODB_CRASH_AFTER_PREFIX"
+const crashEnv = "PICODB_CRASH_AFTER_PREFIX"
 
 // crashEnabled reports whether the process should simulate a torn write.
 func crashEnabled() bool {
@@ -38,3 +38,4 @@ func maybeCrashAfterPrefix(f *os.File, prefix []byte) bool {
 	os.Exit(137)
 	return true // unreachable
 }
+

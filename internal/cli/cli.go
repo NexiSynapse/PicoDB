@@ -1,11 +1,11 @@
-package cli
+﻿package cli
 
 import (
 	"errors"
 	"fmt"
 	"io"
 
-	"microdb/internal/store"
+	"picodb/internal/store"
 )
 
 const (
@@ -15,7 +15,7 @@ const (
 	ExitNotFound = 3
 )
 
-// Stats is consumer-owned (no interface{} leak, Plan §24).
+// Stats is consumer-owned (no interface{} leak, Plan Â§24).
 type Stats struct {
 	Keys int
 }
@@ -94,7 +94,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "usage: microdb dump <dbfile>")
 			return ExitUsage
 		}
-		// Optional command — cut first per ladder. Minimal stub.
+		// Optional command â€” cut first per ladder. Minimal stub.
 		fmt.Fprintln(stderr, "dump: not yet implemented")
 		return ExitError
 	default:
@@ -102,3 +102,4 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return ExitUsage
 	}
 }
+

@@ -1,4 +1,4 @@
-package store
+﻿package store
 
 import (
 	"errors"
@@ -7,13 +7,13 @@ import (
 	"os"
 	"sync"
 
-	"microdb/internal/wal"
+	"picodb/internal/wal"
 )
 
 // ErrKeyNotFound is returned when Get/Delete targets a missing key.
 var ErrKeyNotFound = errors.New("store: key not found")
 
-// Store is the single concurrency authority (Plan §16).
+// Store is the single concurrency authority (Plan Â§16).
 // It owns the in-memory index and the WAL writer, and holds the process file lock.
 type Store struct {
 	mu   sync.RWMutex
@@ -46,8 +46,8 @@ func Open(path string) (*Store, error) {
 			break
 		}
 		if errors.Is(err, wal.ErrCorruptTail) {
-			// Recovery policy: stop at first corrupt tail and truncate (Plan §20).
-			fmt.Fprintf(os.Stderr, "wal: corrupt tail at offset %d — truncating\n", r.Offset())
+			// Recovery policy: stop at first corrupt tail and truncate (Plan Â§20).
+			fmt.Fprintf(os.Stderr, "wal: corrupt tail at offset %d â€” truncating\n", r.Offset())
 			break
 		}
 		if err != nil {
@@ -61,7 +61,7 @@ func Open(path string) (*Store, error) {
 			idx.delete(rec.Key)
 		}
 	}
-	// Self-healing truncation (Plan §21).
+	// Self-healing truncation (Plan Â§21).
 	if err := w.TruncateTo(r.Offset()); err != nil {
 		_ = w.Close()
 		return nil, err
@@ -70,7 +70,7 @@ func Open(path string) (*Store, error) {
 	return &Store{idx: idx, w: w, path: path}, nil
 }
 
-// Put appends a Put record then updates the index (WAL-first ordering, Plan §18).
+// Put appends a Put record then updates the index (WAL-first ordering, Plan Â§18).
 func (s *Store) Put(key, value []byte) error {
 	if len(key) == 0 {
 		return fmt.Errorf("store: empty key")
@@ -120,3 +120,4 @@ func (s *Store) Len() int {
 	defer s.mu.RUnlock()
 	return s.idx.len()
 }
+
