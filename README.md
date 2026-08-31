@@ -95,7 +95,7 @@
 
 ---
 
-## 1. Pitch
+## 1. Description
 
 **PicoDB** is a crash-safe embedded key-value store built entirely on the Go standard library. No external packages, no background threads, no hidden complexity.
 
