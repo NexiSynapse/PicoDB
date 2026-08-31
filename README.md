@@ -764,7 +764,6 @@ make check
 
 <div align="center">
 
-*Built in a 180-minute hackathon — every minute spent on reliability, not ceremony.*
 
 `WAL` • `CRC32` • `MaxRecordSize` • `Replay` • `Truncate` • `flock` • `SyncBatch` • `Self-healing`
 
