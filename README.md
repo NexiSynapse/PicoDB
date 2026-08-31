@@ -4,13 +4,44 @@
 
 [![Go](https://img.shields.io/badge/Go-1.22-00ADD8?style=flat&logo=go&logoColor=white)](#dependency-proof)
 [![stdlib only](https://img.shields.io/badge/stdlib-only-0ea5e9?style=flat)](#stdlibmd)
-[![WAL](https://img.shields.io/badge/WAL-append--only-8b5cf6?style=flat)](#3-wal-format)
-[![CRC32](https://img.shields.io/badge/CRC32-per--record-10b981?style=flat)](#4-recovery-algorithm)
-[![flock](https://img.shields.io/badge/lock-flock%20on%20DB%20fd-f59e0b?style=flat)](#5-locking-model)
-
-[Quick Start](#quick-start) • [Architecture](#2-architecture) • [WAL Format](#3-wal-format) • [Recovery](#4-recovery-algorithm) • [Interactive Shell](#interactive-shell) • [Crash Demo](#8-crash-demo) • [CLI](#7-cli) • [Tests](#12-tests)
+[![WAL](https://img.shields.io/badge/WAL-append--only-8b5cf6?style=flat)](#wal-format)
+[![CRC32](https://img.shields.io/badge/CRC32-per--record-10b981?style=flat)](#recovery-algorithm)
+[![flock](https://img.shields.io/badge/lock-flock%20on%20DB%20fd-f59e0b?style=flat)](#locking-model)
 
 </div>
+
+---
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Interactive Shell](#interactive-shell)
+
+**Project**
+- [Description](#description)
+- [Repository Layout](#repository-layout)
+
+**Concepts**
+- [Architecture](#architecture)
+- [WAL Format](#wal-format)
+- [Recovery Algorithm](#recovery-algorithm)
+- [Locking Model](#locking-model)
+- [Durability Policy](#durability-policy)
+
+**Usage**
+- [CLI](#cli)
+- [Crash Demo](#crash-demo)
+
+**Engineering**
+- [Complexity](#complexity)
+- [Design Decisions &amp; Trade-offs](#design-decisions--trade-offs)
+- [Prior Art](#prior-art)
+- [Tests](#tests)
+- [Dependency Proof](#dependency-proof)
+
+**Roadmap &amp; References**
+- [Future Work](#future-work)
+- [Rubric Mapping](#rubric-mapping)
 
 ---
 
@@ -68,29 +99,7 @@ powershell -NoExit -File .\scripts\interactive.ps1
 
 ---
 
-## Table of Contents
-
-1. [Quick Start](#quick-start)
-2. [Interactive Shell](#interactive-shell)
-3. [Description](#1-Description)
-4. [Architecture](#2-architecture)
-5. [WAL Format](#3-wal-format)
-6. [Recovery Algorithm](#4-recovery-algorithm)
-7. [Locking Model](#5-locking-model)
-8. [Durability Policy](#6-durability-policy)
-9. [CLI](#7-cli)
-10. [Crash Demo](#8-crash-demo)
-11. [Complexity](#9-complexity)
-12. [Design Decisions & Trade-offs](#10-design-decisions--trade-offs)
-13. [Prior Art](#11-prior-art)
-14. [Tests](#12-tests)
-15. [Dependency Proof](#13-dependency-proof)
-16. [Future Work](#14-future-work)
-17. [Rubric Mapping](#15-rubric-mapping)
-
----
-
-## 1. Description
+## Description
 
 **PicoDB** is a crash-safe embedded key-value store built entirely on the Go standard library. No external packages, no background threads, no hidden complexity.
 
@@ -122,7 +131,7 @@ flowchart LR
 
 ---
 
-## 2. Architecture
+## Architecture
 
 One writer. One lock holder. No goroutines, no timers, no channels.
 
@@ -195,7 +204,7 @@ func main() { os.Exit(cli.Run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 ---
 
-## 3. WAL Format
+## WAL Format
 
 Every record is length-prefixed, CRC-protected, and bounded. Corrupting a single byte anywhere in the body is caught; so is a record that claims to be larger than ~16 MB.
 
@@ -266,7 +275,7 @@ flowchart LR
 
 ---
 
-## 4. Recovery Algorithm
+## Recovery Algorithm
 
 **Policy:** stop at the first corrupt or truncated record and throw away everything after it. For an append-only, single-writer log, everything that precedes the first bad byte is trustworthy — so the engine trusts it and forgets the rest. A record with a zero-length key counts as corruption too: it could never have been written by the store, so the replay treats it as a torn tail and truncates.
 
@@ -335,7 +344,7 @@ sequenceDiagram
 
 ---
 
-## 5. Locking Model
+## Locking Model
 
 The single most important fix in this design: **we never create `demo.wal.lock`.** A sidecar lockfile is a lying artifact — it survives `kill -9` and blocks restarts forever. Instead, we lock the database file descriptor *itself*, so the kernel releases the lock the moment the process dies.
 
@@ -379,7 +388,7 @@ flowchart TB
 
 ---
 
-## 6. Durability Policy
+## Durability Policy
 
 No background flusher, no timer ticks. Just a deterministic batch: fsync every 100 appends, and always on `Close()`.
 
@@ -424,7 +433,7 @@ The base WAL path skips `bufio.Writer` entirely and writes straight to the `os.F
 
 ---
 
-## 7. CLI
+## CLI
 
 Small surface, explicit exit codes, and no `interface{}` leaking out of the public API. Tooling that scripts PicoDB never has to guess whether a command worked.
 
@@ -453,7 +462,7 @@ func Run(args []string, stdout, stderr io.Writer) int
 
 ---
 
-## 8. Crash Demo
+## Crash Demo
 
 The centerpiece — and it's deterministic. No sleeps, no timing luck, no flaky tests. A fault-injection hook forces the process to exit mid-append, then we prove everything still works on the next open.
 
@@ -512,7 +521,7 @@ delta: four
 
 ---
 
-## 9. Complexity
+## Complexity
 
 No invented sophistication — just honest, stated bounds.
 
@@ -528,7 +537,7 @@ No invented sophistication — just honest, stated bounds.
 
 ---
 
-## 10. Design Decisions & Trade-offs
+## Design Decisions & Trade-offs
 
 ### Strong Guarantees
 
@@ -561,7 +570,7 @@ React, REST, ML, Docker, K8s, JWT, cloud deploy — the research mentions them, 
 
 ---
 
-## 11. Prior Art
+## Prior Art
 
 We're not claiming an invention — PicoDB is a deliberately lean synthesis of ideas that serious storage engines have used for decades.
 
@@ -589,7 +598,7 @@ mindmap
 
 ---
 
-## 12. Tests
+## Tests
 
 A testing pyramid scaled to a three-hour project: one crash-demo up top, integration in the middle, and a foundation of fast unit tests.
 
@@ -643,7 +652,7 @@ make check   # fmt-check + vet + test + integration
 
 ---
 
-## 13. Dependency Proof
+## Dependency Proof
 
 **The invariant a reviewer can verify in seconds:** a `GOPROXY=off` build with an empty `require ()` block.
 
@@ -672,7 +681,7 @@ GOPROXY=off GOTOOLCHAIN=local go build -o picodb ./cmd/picodb
 
 ---
 
-## 14. Future Work
+## Future Work
 
 These are the directions we'd take PicoDB next — listed here explicitly so the scope is unambiguous and nothing shown was silently skipped:
 
@@ -699,7 +708,7 @@ Forbidden during sprint: compaction, snapshots, segment rotation, replication, n
 
 ---
 
-## 15. Rubric Mapping
+## Rubric Mapping
 
 | Criterion | Weight | Evidence |
 |---|---:|---|
