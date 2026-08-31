@@ -273,7 +273,7 @@ flowchart LR
 
 ## 4. Recovery Algorithm
 
-**Policy:** stop at the first corrupt or truncated record and throw away everything after it. For an append-only, single-writer log, everything that precedes the first bad byte is trustworthy — so the engine trusts it and forgets the rest.
+**Policy:** stop at the first corrupt or truncated record and throw away everything after it. For an append-only, single-writer log, everything that precedes the first bad byte is trustworthy — so the engine trusts it and forgets the rest. A record with a zero-length key counts as corruption too: it could never have been written by the store, so the replay treats it as a torn tail and truncates.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'lineColor':'#64748b'}}}%%
@@ -284,7 +284,7 @@ flowchart TD
   IDX --> OR["OpenReader(path)<br/>off = 0"]
   OR --> LOOP{"Next()"}
   LOOP -- "io.EOF<br/>clean end" --> TRUNC_OK["TruncateTo(Offset())<br/>no-op — file already aligned"]
-  LOOP -- "ErrCorruptTail<br/>torn prefix / body / CRC / length" --> WARN["log: corrupt tail at Offset()<br/>break"]
+  LOOP -- "ErrCorruptTail<br/>torn prefix / body / CRC / length / empty key" --> WARN["log: corrupt tail at Offset()<br/>break"]
   WARN --> TRUNC["TruncateTo(Offset())<br/>discard tail, fsync"]
   TRUNC --> RET["return Store — ready to append"]
   TRUNC_OK --> RET
@@ -513,7 +513,7 @@ delta: four
 == Crash recovery demo passed ==
 ```
 
-> The fault-injection hook exists purely so the demo and tests are reproducible. Normal operation never touches it (`internal/wal/debug.go`).
+> The fault-injection hook exists purely so the demo and tests are reproducible. Normal operation never touches it (`internal/wal/debug.go`). For backward compatibility it still honors the old `MICRODB_CRASH_AFTER_PREFIX` name as well as `PICODB_CRASH_AFTER_PREFIX`.
 
 ---
 
@@ -539,8 +539,17 @@ No invented sophistication — just honest, stated bounds.
 
 * CRC-protected records + `RecordLen == 9+KeyLen+ValLen` consistency check
 * `MaxRecordSize = 16 MiB` — validated **before** allocation (prevents OOM on corrupt length)
+* Empty keys are rejected outright by `Put`/`Get`/`Delete` (`ErrEmptyKey`) and treated as corruption at the replay boundary — so a zero-length key can never be persisted
+* `Close()` syncs and closes the WAL **before** releasing the file lock — there is no window where a second writer could grab the lock while your data is still in flight
 * Single writer, single lock authority (`Store` only)
 * Replay + deterministic truncation + `SyncBatch` + `Close` fsync
+
+### Good Defensive Habits
+
+| Change | Why it matters |
+|---|---|
+| Ignore "invalid handle" when unlocking on Windows | The WAL closes the handle before the lock is released; the OS has already dropped the lock, so treating it as an error would be noise |
+| Honor the legacy `MICRODB_CRASH_AFTER_PREFIX` env var | Keeps older crash-demo scripts working after the rename to `PICODB_CRASH_AFTER_PREFIX` |
 
 ### Deliberate Compromises
 

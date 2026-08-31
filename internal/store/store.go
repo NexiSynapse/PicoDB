@@ -13,6 +13,16 @@ import (
 
 var ErrKeyNotFound = errors.New("store: key not found")
 
+var ErrEmptyKey = errors.New("store: key must not be empty")
+
+func isInvalidHandleError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return msg == "The handle is invalid." || msg == "The handle is invalid" || msg == "lock: UnlockFileEx release: The handle is invalid."
+}
+
 // Store represents the embedded key-value store instance.
 // Store is the single lock authority for both WAL mutations and index updates.
 type Store struct {
@@ -90,6 +100,9 @@ func Open(path string) (*Store, error) {
 // Put writes a key-value record to the WAL and updates the in-memory index.
 // Invariant: WAL append occurs strictly before index update.
 func (s *Store) Put(key, value []byte) error {
+	if len(key) == 0 {
+		return ErrEmptyKey
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -109,6 +122,9 @@ func (s *Store) Put(key, value []byte) error {
 
 // Get looks up a key from the in-memory index.
 func (s *Store) Get(key []byte) ([]byte, error) {
+	if len(key) == 0 {
+		return nil, ErrEmptyKey
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -121,6 +137,9 @@ func (s *Store) Get(key []byte) ([]byte, error) {
 
 // Delete removes a key by appending a tombstone record to the WAL and deleting from the index.
 func (s *Store) Delete(key []byte) error {
+	if len(key) == 0 {
+		return ErrEmptyKey
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -151,25 +170,30 @@ func (s *Store) Len() int {
 }
 
 // Close ensures all buffered WAL writes are fsynced, releases the process lock,
-// and closes the underlying file descriptor.
+// and closes the underlying file descriptor. WAL is synced/closed before
+// releasing the flock to avoid a window where a second writer acquires the lock
+// before data is durable.
 func (s *Store) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var firstErr error
 
-	if s.fileLock != nil {
-		if err := s.fileLock.Unlock(); err != nil && firstErr == nil {
-			firstErr = fmt.Errorf("store: release file lock: %w", err)
-		}
-		s.fileLock = nil
-	}
-
 	if s.w != nil {
 		if err := s.w.Close(); err != nil && firstErr == nil {
 			firstErr = fmt.Errorf("store: close wal writer: %w", err)
 		}
 		s.w = nil
+	}
+
+	if s.fileLock != nil {
+		if err := s.fileLock.Unlock(); err != nil && firstErr == nil {
+			// On Windows, WAL Close closes handle before Unlock, so invalid handle is expected and safe to ignore
+			if !isInvalidHandleError(err) {
+				firstErr = fmt.Errorf("store: release file lock: %w", err)
+			}
+		}
+		s.fileLock = nil
 	}
 
 	return firstErr

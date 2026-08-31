@@ -72,6 +72,11 @@ func (r *Reader) Next() (*Record, error) {
 		return nil, ErrCorruptTail
 	}
 
+	// Reject empty keys at replay boundary (treat as corrupt)
+	if keyLen == 0 {
+		return nil, ErrCorruptTail
+	}
+
 	// Validate record type
 	if recType != RecordPut && recType != RecordDelete {
 		return nil, ErrCorruptTail

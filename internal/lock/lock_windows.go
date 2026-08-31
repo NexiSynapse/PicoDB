@@ -68,6 +68,10 @@ func (l *FileLock) Unlock() error {
 	)
 	l.file = nil
 	if r1 == 0 {
+		// If file was already closed, OS released the lock - ignore invalid handle
+		if err != nil && (err.Error() == "The handle is invalid." || err.Error() == "The handle is invalid") {
+			return nil
+		}
 		return fmt.Errorf("lock: UnlockFileEx release: %w", err)
 	}
 	return nil
