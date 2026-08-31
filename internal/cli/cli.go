@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"microdb/internal/store"
+	"picodb/internal/store"
 )
 
 const (
@@ -32,7 +32,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	switch cmd {
 	case "put":
 		if len(args) != 4 {
-			fmt.Fprintln(stderr, "usage: microdb put <dbfile> <key> <value>")
+			fmt.Fprintln(stderr, "usage: picodb put <dbfile> <key> <value>")
 			return ExitUsage
 		}
 		key := []byte(args[2])
@@ -53,7 +53,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 	case "get":
 		if len(args) != 3 {
-			fmt.Fprintln(stderr, "usage: microdb get <dbfile> <key>")
+			fmt.Fprintln(stderr, "usage: picodb get <dbfile> <key>")
 			return ExitUsage
 		}
 		key := []byte(args[2])
@@ -80,7 +80,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 	case "del":
 		if len(args) != 3 {
-			fmt.Fprintln(stderr, "usage: microdb del <dbfile> <key>")
+			fmt.Fprintln(stderr, "usage: picodb del <dbfile> <key>")
 			return ExitUsage
 		}
 		key := []byte(args[2])
@@ -109,9 +109,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "MicroDB - Embedded Crash-Safe Key-Value Store")
+	fmt.Fprintln(w, "PicoDB - Embedded Crash-Safe Key-Value Store")
 	fmt.Fprintln(w, "Usage:")
-	fmt.Fprintln(w, "  microdb put <dbfile> <key> <value>")
-	fmt.Fprintln(w, "  microdb get <dbfile> <key>")
-	fmt.Fprintln(w, "  microdb del <dbfile> <key>")
+	fmt.Fprintln(w, "  picodb put <dbfile> <key> <value>")
+	fmt.Fprintln(w, "  picodb get <dbfile> <key>")
+	fmt.Fprintln(w, "  picodb del <dbfile> <key>")
 }

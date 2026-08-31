@@ -1,5 +1,5 @@
 build:
-	go build -o microdb ./cmd/microdb
+	go build -o picodb ./cmd/picodb
 
 test:
 	go test ./...
