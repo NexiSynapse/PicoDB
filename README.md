@@ -77,7 +77,7 @@
 
 ## Table of Contents
 
-1. [Pitch](#1-pitch)
+1. [Description](#1-Description)
 2. [Architecture](#2-architecture)
 3. [WAL Format](#3-wal-format)
 4. [Recovery Algorithm](#4-recovery-algorithm)
