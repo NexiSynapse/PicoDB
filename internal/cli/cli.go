@@ -1,4 +1,4 @@
-﻿package cli
+package cli
 
 import (
 	"errors"
@@ -15,91 +15,103 @@ const (
 	ExitNotFound = 3
 )
 
-// Stats is consumer-owned (no interface{} leak, Plan Â§24).
 type Stats struct {
 	Keys int
 }
 
-// Run is the CLI entry point. It never calls os.Exit; the caller decides.
+// Run executes a CLI command with the given arguments, writing output to stdout/stderr.
 func Run(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: microdb <put|get|del|dump> <dbfile> [key] [value]")
+	if len(args) < 2 {
+		printUsage(stderr)
 		return ExitUsage
 	}
+
 	cmd := args[0]
+	dbPath := args[1]
+
 	switch cmd {
 	case "put":
 		if len(args) != 4 {
-			fmt.Fprintln(stderr, "usage: microdb put <dbfile> <key> <value>")
+			fmt.Fprintln(stderr, "usage: picodb put <dbfile> <key> <value>")
 			return ExitUsage
 		}
-		db, key, val := args[1], args[2], args[3]
-		s, err := store.Open(db)
+		key := []byte(args[2])
+		value := []byte(args[3])
+
+		s, err := store.Open(dbPath)
 		if err != nil {
-			fmt.Fprintln(stderr, err)
+			fmt.Fprintf(stderr, "error opening database: %v\n", err)
 			return ExitError
 		}
 		defer s.Close()
-		if err := s.Put([]byte(key), []byte(val)); err != nil {
-			fmt.Fprintln(stderr, err)
+
+		if err := s.Put(key, value); err != nil {
+			fmt.Fprintf(stderr, "error putting key: %v\n", err)
 			return ExitError
 		}
 		return ExitOK
+
 	case "get":
 		if len(args) != 3 {
-			fmt.Fprintln(stderr, "usage: microdb get <dbfile> <key>")
+			fmt.Fprintln(stderr, "usage: picodb get <dbfile> <key>")
 			return ExitUsage
 		}
-		db, key := args[1], args[2]
-		s, err := store.Open(db)
+		key := []byte(args[2])
+
+		s, err := store.Open(dbPath)
 		if err != nil {
-			fmt.Fprintln(stderr, err)
+			fmt.Fprintf(stderr, "error opening database: %v\n", err)
 			return ExitError
 		}
 		defer s.Close()
-		val, err := s.Get([]byte(key))
+
+		val, err := s.Get(key)
 		if err != nil {
 			if errors.Is(err, store.ErrKeyNotFound) {
 				fmt.Fprintln(stderr, "key not found")
 				return ExitNotFound
 			}
-			fmt.Fprintln(stderr, err)
+			fmt.Fprintf(stderr, "error getting key: %v\n", err)
 			return ExitError
 		}
+
 		fmt.Fprintln(stdout, string(val))
 		return ExitOK
-	case "del", "delete":
+
+	case "del":
 		if len(args) != 3 {
-			fmt.Fprintln(stderr, "usage: microdb del <dbfile> <key>")
+			fmt.Fprintln(stderr, "usage: picodb del <dbfile> <key>")
 			return ExitUsage
 		}
-		db, key := args[1], args[2]
-		s, err := store.Open(db)
+		key := []byte(args[2])
+
+		s, err := store.Open(dbPath)
 		if err != nil {
-			fmt.Fprintln(stderr, err)
+			fmt.Fprintf(stderr, "error opening database: %v\n", err)
 			return ExitError
 		}
 		defer s.Close()
-		if err := s.Delete([]byte(key)); err != nil {
+
+		if err := s.Delete(key); err != nil {
 			if errors.Is(err, store.ErrKeyNotFound) {
 				fmt.Fprintln(stderr, "key not found")
 				return ExitNotFound
 			}
-			fmt.Fprintln(stderr, err)
+			fmt.Fprintf(stderr, "error deleting key: %v\n", err)
 			return ExitError
 		}
 		return ExitOK
-	case "dump":
-		if len(args) != 2 {
-			fmt.Fprintln(stderr, "usage: microdb dump <dbfile>")
-			return ExitUsage
-		}
-		// Optional command â€” cut first per ladder. Minimal stub.
-		fmt.Fprintln(stderr, "dump: not yet implemented")
-		return ExitError
+
 	default:
-		fmt.Fprintf(stderr, "unknown command %q\n", cmd)
+		printUsage(stderr)
 		return ExitUsage
 	}
 }
 
+func printUsage(w io.Writer) {
+	fmt.Fprintln(w, "PicoDB - Embedded Crash-Safe Key-Value Store")
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  picodb put <dbfile> <key> <value>")
+	fmt.Fprintln(w, "  picodb get <dbfile> <key>")
+	fmt.Fprintln(w, "  picodb del <dbfile> <key>")
+}

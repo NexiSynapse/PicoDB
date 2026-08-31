@@ -1,33 +1,37 @@
 package store
 
-// index is a plain in-memory hash map. No mutex — Store is the single lock authority (Plan §16).
+// index maintains an in-memory key-to-value directory (Bitcask-style).
+// Notice that index has no internal mutex because Store is the single lock authority.
 type index struct {
 	m map[string][]byte
 }
 
 func newIndex() *index {
-	return &index{m: make(map[string][]byte)}
+	return &index{
+		m: make(map[string][]byte),
+	}
 }
 
-func (idx *index) set(key, val []byte) {
-	// Copy to avoid aliasing caller buffers.
-	k := string(append([]byte(nil), key...))
-	v := append([]byte(nil), val...)
-	idx.m[k] = v
+func (i *index) set(key, val []byte) {
+	vCopy := make([]byte, len(val))
+	copy(vCopy, val)
+	i.m[string(key)] = vCopy
 }
 
-func (idx *index) delete(key []byte) {
-	delete(idx.m, string(key))
+func (i *index) delete(key []byte) {
+	delete(i.m, string(key))
 }
 
-func (idx *index) get(key []byte) ([]byte, bool) {
-	v, ok := idx.m[string(key)]
+func (i *index) get(key []byte) ([]byte, bool) {
+	val, ok := i.m[string(key)]
 	if !ok {
 		return nil, false
 	}
-	// Return copy so caller cannot mutate index.
-	out := append([]byte(nil), v...)
-	return out, true
+	vCopy := make([]byte, len(val))
+	copy(vCopy, val)
+	return vCopy, true
 }
 
-func (idx *index) len() int { return len(idx.m) }
+func (i *index) len() int {
+	return len(i.m)
+}

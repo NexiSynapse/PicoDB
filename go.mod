@@ -1,4 +1,4 @@
-﻿module picodb
+module picodb
 
 go 1.22
 

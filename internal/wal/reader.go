@@ -2,140 +2,115 @@ package wal
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
-	"hash/crc32"
 	"io"
 	"os"
 )
 
-// Reader sequentially scans the WAL for replay.
-// It follows the exact validation order from Plan.md §11:
-//
-//	Read 8-byte prefix
-//	  -> clean EOF -> io.EOF
-//	  -> short prefix -> ErrCorruptTail
-//	Validate RecordLen <= MaxRecordSize -> ErrCorruptTail
-//	Read exact body length -> short read -> ErrCorruptTail
-//	Decode Type/KeyLen/ValLen -> validate RecordLen == 9+KeyLen+ValLen -> ErrCorruptTail
-//	Validate record type -> ErrCorruptTail
-//	Calculate CRC -> mismatch -> ErrCorruptTail
-//	Return record
-//
-// No invalid length reaches an unbounded allocation.
 type Reader struct {
-	f   *os.File
-	off int64 // file offset of next record to read (start of next prefix)
+	file      *os.File
+	offset    int64
+	ownsClose bool
 }
 
-// OpenReader opens the WAL file at path for sequential reading from offset 0.
+// OpenReader opens an existing WAL file for sequential replay.
 func OpenReader(path string) (*Reader, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			// Treat missing file as empty WAL; caller may create via Writer.
-			// Create an empty file so Offset/Truncate work downstream, but keep reader empty.
-			// Instead return a reader with no file and immediate EOF.
-			// For simplicity, create file then open.
-			nf, cerr := os.OpenFile(path, os.O_CREATE|os.O_RDONLY, 0644)
-			if cerr != nil {
-				return nil, fmt.Errorf("open wal reader: %w", err)
-			}
-			return &Reader{f: nf, off: 0}, nil
-		}
-		return nil, fmt.Errorf("open wal reader: %w", err)
+		return nil, fmt.Errorf("wal: open reader file: %w", err)
 	}
-	return &Reader{f: f, off: 0}, nil
+
+	return &Reader{
+		file:      f,
+		offset:    0,
+		ownsClose: true,
+	}, nil
 }
 
-// Offset returns the file offset of the next record to read.
-// On success, it is positioned after the last fully-validated record.
-// On ErrCorruptTail, it is the start offset of the corrupt/torn record, suitable
-// for Writer.TruncateTo to discard the tail.
-func (r *Reader) Offset() int64 { return r.off }
-
-// Close closes the reader's file descriptor.
-func (r *Reader) Close() error {
-	if r.f == nil {
-		return nil
+// NewReader creates a Reader from an existing *os.File descriptor.
+func NewReader(f *os.File) *Reader {
+	_, _ = f.Seek(0, io.SeekStart)
+	return &Reader{
+		file:      f,
+		offset:    0,
+		ownsClose: false,
 	}
-	return r.f.Close()
 }
 
-// Next returns the next valid record or an error.
-// io.EOF indicates clean end-of-file (no partial record).
-// ErrCorruptTail indicates the first corrupt/truncated tail record.
+// Next reads and validates the next valid record in the WAL.
+// Adheres strictly to the validation sequence in Section 11 of the architecture plan.
 func (r *Reader) Next() (*Record, error) {
-	cur := r.off
-	var prefix [PrefixSize]byte
-	// Ensure file offset matches logical offset (in case of prior Seek).
-	if _, err := r.f.Seek(cur, io.SeekStart); err != nil {
-		return nil, fmt.Errorf("wal seek: %w", err)
-	}
-	n, err := io.ReadFull(r.f, prefix[:])
+	var prefixBuf [PrefixSize]byte
+	n, err := io.ReadFull(r.file, prefixBuf[:])
 	if err != nil {
-		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-			// io.ReadFull returns ErrUnexpectedEOF on short read; map both to tail error
-			// unless it was a clean EOF with 0 bytes.
-			if n == 0 && err == io.EOF {
-				return nil, io.EOF
-			}
-			return nil, ErrCorruptTail
-		}
-		if err == io.EOF {
+		if err == io.EOF || (err == io.ErrUnexpectedEOF && n == 0) {
 			return nil, io.EOF
 		}
+		// Short prefix or read error at tail
 		return nil, ErrCorruptTail
 	}
-	recordLen, wantCRC := DecodePrefix(prefix)
-	if recordLen > MaxRecordSize {
+
+	recordLen, expectedCRC := DecodePrefix(prefixBuf)
+
+	// Length bounds check before allocating body
+	if recordLen < BodyHeaderSize || recordLen > MaxRecordSize {
 		return nil, ErrCorruptTail
 	}
-	// Guard against impossible sizes before allocation.
-	// We still need to read the body to detect torn writes, but we already know
-	// recordLen is bounded so allocation is safe.
+
 	body := make([]byte, recordLen)
-	if _, err := io.ReadFull(r.f, body); err != nil {
+	if _, err := io.ReadFull(r.file, body); err != nil {
+		// Short body read at tail
 		return nil, ErrCorruptTail
 	}
-	if len(body) < BodyHeaderSize {
-		return nil, ErrCorruptTail
-	}
-	typ := RecordType(body[0])
+
+	recType := RecordType(body[0])
 	keyLen := binary.BigEndian.Uint32(body[1:5])
 	valLen := binary.BigEndian.Uint32(body[5:9])
 
-	// Validate structural consistency: RecordLen == 9 + KeyLen + ValLen
-	if recordLen != 9+keyLen+valLen {
+	// Structural length consistency check: recordLen == 9 + KeyLen + ValLen
+	if uint64(recordLen) != uint64(BodyHeaderSize)+uint64(keyLen)+uint64(valLen) {
 		return nil, ErrCorruptTail
 	}
-	// Validate type
-	if !ValidRecordType(typ) {
+
+	// Validate record type
+	if recType != RecordPut && recType != RecordDelete {
 		return nil, ErrCorruptTail
 	}
-	// Validate body length matches header
-	expectedBody := int(9 + keyLen + valLen)
-	if len(body) != expectedBody {
+
+	// CRC32 checksum integrity check
+	if Checksum(body) != expectedCRC {
 		return nil, ErrCorruptTail
 	}
-	if uint32(len(body[9:])) < keyLen+valLen {
-		return nil, ErrCorruptTail
-	}
-	// CRC over body (Type||KeyLen||ValLen||Key||Value)
-	gotCRC := crc32.ChecksumIEEE(body)
-	if gotCRC != wantCRC {
-		return nil, ErrCorruptTail
-	}
-	// Extract key/value
+
 	key := make([]byte, keyLen)
 	copy(key, body[9:9+keyLen])
-	var val []byte
-	if typ == RecordPut && valLen > 0 {
-		val = make([]byte, valLen)
-		copy(val, body[9+keyLen:9+keyLen+valLen])
+
+	val := make([]byte, valLen)
+	copy(val, body[9+keyLen:])
+
+	r.offset += int64(PrefixSize + recordLen)
+
+	return &Record{
+		Type:  recType,
+		Key:   key,
+		Value: val,
+	}, nil
+}
+
+// Offset returns the offset of the last successfully validated record boundary.
+func (r *Reader) Offset() int64 {
+	return r.offset
+}
+
+// Close closes the underlying reader file descriptor if owned.
+func (r *Reader) Close() error {
+	if r.file == nil {
+		return nil
 	}
-	// Advance logical offset only on success.
-	r.off = cur + int64(PrefixSize) + int64(recordLen)
-	rec := &Record{Type: typ, Key: key, Value: val}
-	return rec, nil
+	var err error
+	if r.ownsClose {
+		err = r.file.Close()
+	}
+	r.file = nil
+	return err
 }
