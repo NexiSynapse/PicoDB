@@ -61,13 +61,13 @@ func main() { os.Exit(cli.Run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 **Who owns what:**
 
-| Worker | Owns | File |
-|---|---|---|
-| **A** | WAL engine | `internal/wal/record.go`, `writer.go`, `reader.go`, `debug.go` |
-| **B** | Store + Index | `internal/store/store.go`, `index.go` |
-| **C** | Tests | `*_test.go`, `integration` |
-| **D** | Docs/Release | `README.md`, `STDLIB.md`, `Makefile`, `go.mod` |
-| **E** | Lock + crash harness | `internal/lock/*`, `scripts/crash_demo.sh` |
+| Owns | File |
+|---|---|
+| WAL engine | `internal/wal/record.go`, `writer.go`, `reader.go`, `debug.go` |
+| Store + Index | `internal/store/store.go`, `index.go` |
+| Tests | `*_test.go`, `integration` |
+| Docs/Release | `README.md`, `STDLIB.md`, `Makefile`, `go.mod` |
+| Lock + crash harness | `internal/lock/*`, `scripts/crash_demo.sh` |
 
 ---
 

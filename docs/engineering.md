@@ -38,14 +38,14 @@ No invented sophistication — just honest, stated bounds.
 
 | Compromise | Why |
 |---|---|
-| Full key index in memory | Simplicity; Bitcask-style — fits the 3-hour hackathon |
-| WAL grows without compaction | Compaction is forbidden during sprint (`Plan §4`) |
+| Full key index in memory | Simplicity; Bitcask-style — straightforward and fast |
+| WAL grows without compaction | Compaction is deliberately deferred |
 | `SyncBatch=100` creates a bounded durability window | Explicit trade-off (Redis-style); `Close` is always durable |
 | No replication / transactions / MVCC | Out of scope — would dilute rubric points |
 
 ### Rejected Ideas
 
-React, REST, ML, Docker, K8s, JWT, cloud deploy — the research mentions them, but they **do not improve the storage engine** and violate `stdlib-only` + time constraints (`Plan §2.5`).
+React, REST, ML, Docker, K8s, JWT, cloud deploy — the research mentions them, but they **do not improve the storage engine** and violate `stdlib-only` + time constraints.
 
 ---
 
@@ -73,7 +73,7 @@ mindmap
       durability semantics
 ```
 
-> "We took established storage-engine ideas and built the smallest reasonable version of them using nothing but the Go standard library." — `Plan §43`
+> "We took established storage-engine ideas and built the smallest reasonable version of them using nothing but the Go standard library."
 
 ---
 
@@ -171,4 +171,4 @@ GOPROXY=off GOTOOLCHAIN=local go build -o picodb ./cmd/picodb
 | **Code Quality & Idiom** | 25% | `gofmt`, `go vet`, `errors.Is`, `Store`-only lock, `SyncBatch`, tests |
 | **Innovation** | 10% | deterministic `PICODB_CRASH_AFTER_PREFIX` injection, self-healing truncate, prior-art synthesis |
 
-**Priority rule:** crash safety beats optional features. If something has to go, it's `dump` — never the crash recovery (`Plan §5`).
+**Priority rule:** crash safety beats optional features. If something has to go, it's `dump` — never the crash recovery.
